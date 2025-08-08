@@ -16,13 +16,13 @@
 #define DFMODULES_INCLUDE_DFMODULES_DATASTORE_HPP_
 
 #include "appfwk/ConfigurationManager.hpp"
-#include "opmonlib/MonitorableObject.hpp"
 #include "cetlib/BasicPluginFactory.h"
 #include "cetlib/compiler_macros.h"
 #include "daqdataformats/TimeSlice.hpp"
 #include "daqdataformats/TriggerRecord.hpp"
 #include "daqdataformats/Types.hpp"
 #include "logging/Logging.hpp" // NOTE: if ISSUES ARE DECLARED BEFORE include logging/Logging.hpp, TLOG_DEBUG<<issue wont work.
+#include "opmonlib/MonitorableObject.hpp"
 #include "utilities/NamedObject.hpp"
 
 #include "nlohmann/json.hpp"
@@ -47,10 +47,10 @@
 #define DEFINE_DUNE_DATA_STORE(klass)                                                                                  \
   EXTERN_C_FUNC_DECLARE_START                                                                                          \
   std::shared_ptr<dunedaq::dfmodules::DataStore> make(const std::string& name,                                         \
-                                                      std::shared_ptr<dunedaq::appfwk::ConfigurationManager> mcfg,      \
-		  				      const std::string& writer_name	)                              \
+                                                      std::shared_ptr<dunedaq::appfwk::ConfigurationManager> mcfg,     \
+                                                      const std::string& identifier)                                   \
   {                                                                                                                    \
-    return std::shared_ptr<dunedaq::dfmodules::DataStore>(new klass(name, mcfg, writer_name));                         \
+    return std::shared_ptr<dunedaq::dfmodules::DataStore>(new klass(name, mcfg, identifier));                          \
   }                                                                                                                    \
   }
 
@@ -105,15 +105,18 @@ namespace dfmodules {
 /**
  * @brief comment
  */
-class DataStore : public utilities::NamedObject, public opmonlib::MonitorableObject
+class DataStore
+  : public utilities::NamedObject
+  , public opmonlib::MonitorableObject
 {
 public:
   /**
    * @brief DataStore Constructor
    * @param name Name of the DataStore instance
    */
-  explicit DataStore(const std::string& name)
-    : utilities::NamedObject(name), MonitorableObject()
+  DataStore(const std::string& name, std::shared_ptr<dunedaq::appfwk::ConfigurationManager>, const std::string&)
+    : utilities::NamedObject(name)
+    , MonitorableObject()
   {
   }
 
@@ -130,13 +133,33 @@ public:
   virtual void write(const daqdataformats::TimeSlice& ts) = 0;
 
   /**
+   * @brief Read a TriggerRecord from the DataStore
+   * @param trigger_number Trigger Number to read (or s_invalid_trigger_number for implementation-defined "next"
+   * TriggerRecord)
+   * @param sequence_number Sequence Number to read (or s_invalid_sequence_number for implementation-defined "next"
+   * TriggerRecord)
+   * @return std::optional containing the TriggerRecord, if one matched the request
+   */
+  virtual std::optional<daqdataformats::TriggerRecord> readTriggerRecord(
+    daqdataformats::trigger_number_t trigger_number = daqdataformats::TypeDefaults::s_invalid_trigger_number,
+    daqdataformats::sequence_number_t sequence_number = daqdataformats::TypeDefaults::s_invalid_sequence_number) = 0;
+
+  /**
+   * @brief Read a TimeSlice from the DataStore
+   * @param timeslice_number TimeSlice Number to read (or s_invalid_timeslice_number for implementation-defined "next"
+   * TimeSlice)
+   * @return std::optional containing the TimeSlice, if one matched the request
+   */
+  virtual std::optional<daqdataformats::TimeSlice> readTimeSlice(
+    daqdataformats::timeslice_number_t timeslice_number = daqdataformats::TypeDefaults::s_invalid_timeslice_number) = 0;
+
+  /**
    * @brief Informs the DataStore that writes or reads of data blocks associated
    * with the specified run number will soon be requested.
    * This allows DataStore instances to make any preparations that will be
    * beneficial in advance of the first data blocks being written or read.
    */
-  virtual void prepare_for_run(daqdataformats::run_number_t run_number,
-                               bool run_is_for_test_purposes) = 0;
+  virtual void prepare_for_run(daqdataformats::run_number_t run_number, bool run_is_for_test_purposes) = 0;
 
   /**
    * @brief Informs the DataStore that writes or reads of data blocks associated
@@ -164,13 +187,13 @@ inline std::shared_ptr<DataStore>
 make_data_store(const std::string& type,
                 const std::string& name,
                 std::shared_ptr<dunedaq::appfwk::ConfigurationManager> mcfg,
-		const std::string& writer_identifier)
+                const std::string& identifier)
 {
   static cet::BasicPluginFactory bpf("duneDataStore", "make"); // NOLINT
 
   std::shared_ptr<DataStore> ds;
   try {
-    ds = bpf.makePlugin<std::shared_ptr<DataStore>>(type, name, mcfg, writer_identifier);
+    ds = bpf.makePlugin<std::shared_ptr<DataStore>>(type, name, mcfg, identifier);
   } catch (const cet::exception& cexpt) {
     throw DataStoreCreationFailed(ERS_HERE, type, name, cexpt);
   }
