@@ -61,6 +61,8 @@ FragmentAggregatorModule::init(std::shared_ptr<appfwk::ConfigurationManager> mcf
     }
   }
 
+  m_fragment_send_timeout = std::chrono::milliseconds(mcfg->session()->get_data_request_timeout_ms());
+
   // this is just to get the data request receiver registered early (before Start)
   auto iom = iomanager::IOManager::get();
   iom->get_receiver<dfmessages::DataRequest>(m_data_req_input);
@@ -237,7 +239,7 @@ FragmentAggregatorModule::process_fragment(std::unique_ptr<daqdataformats::Fragm
                    << "." << fragment->get_sequence_number() << " and SourceID " << fragment->get_element_id() << " to "
                    << trb_identifier;
     auto sender = get_iom_sender<std::unique_ptr<daqdataformats::Fragment>>(trb_identifier);
-    sender->send(std::move(fragment), iomanager::Sender::s_no_block);
+    sender->send(std::move(fragment), m_fragment_send_timeout);
 
     m_fragments_processed++;
     auto timestamp_total = get_current_time_us() - m_timestamp_before_frag;
