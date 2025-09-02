@@ -140,7 +140,7 @@ public:
    * TriggerRecord)
    * @return std::optional containing the TriggerRecord, if one matched the request
    */
-  virtual std::optional<daqdataformats::TriggerRecord> readTriggerRecord(
+  virtual std::optional<daqdataformats::TriggerRecord> read_trigger_record(
     daqdataformats::trigger_number_t trigger_number = daqdataformats::TypeDefaults::s_invalid_trigger_number,
     daqdataformats::sequence_number_t sequence_number = daqdataformats::TypeDefaults::s_invalid_sequence_number) = 0;
 
@@ -150,7 +150,7 @@ public:
    * TimeSlice)
    * @return std::optional containing the TimeSlice, if one matched the request
    */
-  virtual std::optional<daqdataformats::TimeSlice> readTimeSlice(
+  virtual std::optional<daqdataformats::TimeSlice> read_time_slice(
     daqdataformats::timeslice_number_t timeslice_number = daqdataformats::TypeDefaults::s_invalid_timeslice_number) = 0;
 
   /**

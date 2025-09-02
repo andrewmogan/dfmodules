@@ -6,11 +6,14 @@
 
 #include "HDF5DataStore.hpp"
 
+#include <regex>
+#include <filesystem>
+
 namespace dunedaq::dfmodules {
 HDF5DataStore::HDF5DataStore(std::string const& name,
                              std::shared_ptr<appfwk::ConfigurationManager> mcfg,
                              std::string const& writer_name)
-  : DataStore(name, mcfg, writer_name)
+  : FileDataStore(name, mcfg, writer_name)
   , m_basic_name_of_open_file("")
   , m_open_flags_of_open_file(0)
   , m_run_number(0)
@@ -185,29 +188,21 @@ HDF5DataStore::write(const daqdataformats::TimeSlice& ts)
 }
 
 std::optional<daqdataformats::TriggerRecord>
-HDF5DataStore::readTriggerRecord(daqdataformats::trigger_number_t trigger_number,
-                                 daqdataformats::sequence_number_t sequence_number)
+HDF5DataStore::read_trigger_record(daqdataformats::trigger_number_t trigger_number,
+                                   daqdataformats::sequence_number_t sequence_number)
 {
-  // determine the filename from configuration parameters
-  std::string full_filename = get_file_name(m_run_number);
-
-  try {
-    open_file_if_needed(full_filename, HighFive::File::ReadOnly);
-  } catch (std::exception const& excpt) {
-    throw FileOperationProblem(ERS_HERE, get_name(), full_filename, excpt);
-  } catch (...) { // NOLINT(runtime/exceptions)
-    // NOLINT here because we *ARE* re-throwing the exception!
-    throw FileOperationProblem(ERS_HERE, get_name(), full_filename);
+  if (m_file_handle.get() == nullptr) {
+    throw InvalidFileHandle(ERS_HERE, get_name());
   }
 
   if (m_file_handle->is_trigger_record_type()) {
     try {
       auto rids = m_file_handle->get_all_record_ids();
       if (trigger_number == daqdataformats::TypeDefaults::s_invalid_trigger_number) {
-        trigger_number = m_current_record_number;
+        trigger_number = m_current_record_number != 0 ? m_current_record_number : rids.begin()->first;
       }
       if (sequence_number == daqdataformats::TypeDefaults::s_invalid_sequence_number) {
-        sequence_number = m_current_sequence_number;
+        sequence_number = m_current_sequence_number != 0 ? m_current_sequence_number : rids.begin()->second;
       }
 
       auto current_rid = rids.find(std::make_pair(trigger_number, sequence_number));
@@ -220,8 +215,7 @@ HDF5DataStore::readTriggerRecord(daqdataformats::trigger_number_t trigger_number
         m_file_index++;
         m_current_record_number = 0;
         m_current_sequence_number = 0;
-      }
-      else {
+      } else {
         m_current_record_number = next_rid->first;
         m_current_sequence_number = next_rid->second;
       }
@@ -236,25 +230,17 @@ HDF5DataStore::readTriggerRecord(daqdataformats::trigger_number_t trigger_number
 }
 
 std::optional<daqdataformats::TimeSlice>
-HDF5DataStore::readTimeSlice(daqdataformats::timeslice_number_t timeslice_number)
+HDF5DataStore::read_time_slice(daqdataformats::timeslice_number_t timeslice_number)
 {
-  // determine the filename from configuration parameters
-  std::string full_filename = get_file_name(m_run_number);
-
-  try {
-    open_file_if_needed(full_filename, HighFive::File::ReadOnly);
-  } catch (std::exception const& excpt) {
-    throw FileOperationProblem(ERS_HERE, get_name(), full_filename, excpt);
-  } catch (...) { // NOLINT(runtime/exceptions)
-    // NOLINT here because we *ARE* re-throwing the exception!
-    throw FileOperationProblem(ERS_HERE, get_name(), full_filename);
+  if (m_file_handle.get() == nullptr) {
+    throw InvalidFileHandle(ERS_HERE, get_name());
   }
 
   if (m_file_handle->is_timeslice_type()) {
     try {
       auto rids = m_file_handle->get_all_record_ids();
       if (timeslice_number == daqdataformats::TypeDefaults::s_invalid_timeslice_number) {
-        timeslice_number = m_current_record_number;
+        timeslice_number = m_current_record_number != 0 ? m_current_record_number : rids.begin()->first;
       }
 
       hdf5libs::HDF5RawDataFile::record_id_t ts_rid(timeslice_number, 0);
@@ -452,6 +438,61 @@ HDF5DataStore::open_file_if_needed(const std::string& file_name, unsigned open_f
   } else {
     TLOG_DEBUG(TLVL_BASIC) << get_name() << ": Pointer file to  " << m_basic_name_of_open_file
                            << " was already opened with open_flags " << std::to_string(m_open_flags_of_open_file);
+  }
+}
+
+std::vector<std::string>
+HDF5DataStore::get_available_files(daqdataformats::run_number_t run_number, bool restrict_by_identifier)
+{
+  std::vector<std::string> files;
+  std::ostringstream work_oss;
+  work_oss << m_operational_environment + "_" + m_config_params->get_filename_params()->get_file_type_prefix();
+  if (work_oss.str().length() > 0) {
+    work_oss << "_";
+  }
+
+  work_oss << m_config_params->get_filename_params()->get_run_number_prefix();
+  if (run_number != daqdataformats::TypeDefaults::s_invalid_run_number) {
+
+    work_oss << std::setw(m_config_params->get_filename_params()->get_digits_for_run_number()) << std::setfill('0')
+             << run_number;
+  } else {
+    work_oss << "[0-9]+";
+  }
+  work_oss << "_";
+
+  work_oss << m_config_params->get_filename_params()->get_file_index_prefix();
+  work_oss << "[0-9]+"; // File index
+
+  if (restrict_by_identifier) {
+    work_oss << "_" << m_writer_identifier;
+  } else {
+    work_oss << "_" << ".*";
+  }
+  work_oss << ".hdf5";
+
+  auto file_name_pattern = work_oss.str();
+  std::regex file_matcher{ file_name_pattern };
+
+  std::filesystem::path directory( m_config_params->get_directory_path() );
+  for (auto const& dir_entry : std::filesystem::directory_iterator(directory)) {
+    if (std::regex_search(dir_entry.path().string(), file_matcher)) {
+      files.push_back(dir_entry.path());
+    }
+  }
+  return files;
+}
+
+void
+HDF5DataStore::set_file_name_for_reading(std::string const& file_name)
+{
+  try {
+    open_file_if_needed(file_name, HighFive::File::ReadOnly);
+  } catch (std::exception const& excpt) {
+    throw FileOperationProblem(ERS_HERE, get_name(), file_name, excpt);
+  } catch (...) { // NOLINT(runtime/exceptions)
+    // NOLINT here because we *ARE* re-throwing the exception!
+    throw FileOperationProblem(ERS_HERE, get_name(), file_name);
   }
 }
 

@@ -13,7 +13,7 @@
 #define DFMODULES_PLUGINS_HDF5DATASTORE_HPP_
 
 #include "HDF5FileUtils.hpp"
-#include "dfmodules/DataStore.hpp"
+#include "dfmodules/FileDataStore.hpp"
 #include "dfmodules/opmon/DataStore.pb.h"
 
 #include "hdf5libs/HDF5RawDataFile.hpp"
@@ -59,6 +59,13 @@ ERS_DECLARE_ISSUE_BASE(dfmodules,
                        ((std::string)filename))
 
 ERS_DECLARE_ISSUE_BASE(dfmodules,
+                       InvalidFileHandle,
+                       appfwk::GeneralDAQModuleIssue,
+                       "Invalid or null file handle encountered",
+                       ((std::string)name),
+                       ERS_EMPTY)
+
+ERS_DECLARE_ISSUE_BASE(dfmodules,
                        InvalidHDF5Dataset,
                        appfwk::GeneralDAQModuleIssue,
                        "The HDF5 Dataset associated with name \"" << data_set << "\" is invalid. (file = " << filename
@@ -98,7 +105,7 @@ namespace dfmodules {
  * @brief HDF5DataStore creates an HDF5 instance
  * of the DataStore class
  */
-class HDF5DataStore : public DataStore
+class HDF5DataStore : public FileDataStore
 {
 
 public:
@@ -143,7 +150,7 @@ public:
    * TriggerRecord)
    * @return std::optional containing the TriggerRecord, if one matched the request
    */
-  std::optional<daqdataformats::TriggerRecord> readTriggerRecord(
+  std::optional<daqdataformats::TriggerRecord> read_trigger_record(
     daqdataformats::trigger_number_t trigger_number = daqdataformats::TypeDefaults::s_invalid_trigger_number,
     daqdataformats::sequence_number_t sequence_number = daqdataformats::TypeDefaults::s_invalid_sequence_number) override;
 
@@ -153,7 +160,7 @@ public:
    * TimeSlice)
    * @return std::optional containing the TimeSlice, if one matched the request
    */
-  std::optional<daqdataformats::TimeSlice> readTimeSlice(
+  std::optional<daqdataformats::TimeSlice> read_time_slice(
     daqdataformats::timeslice_number_t timeslice_number = daqdataformats::TypeDefaults::s_invalid_timeslice_number) override;
 
   /**
@@ -175,6 +182,10 @@ public:
    * reads for a given run number have finished.
    */
   void finish_with_run(daqdataformats::run_number_t /*run_number*/) override;
+
+  std::vector<std::string> get_available_files(daqdataformats::run_number_t run_number, bool restrict_by_identifier) override;
+
+  void set_file_name_for_reading(std::string const& file_name) override;
 
 protected:
   void generate_opmon_data() override;
