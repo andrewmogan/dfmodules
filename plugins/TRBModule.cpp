@@ -176,7 +176,7 @@ TRBModule::generate_opmon_data()
 }
 
 void
-TRBModule::do_conf(const data_t&)
+TRBModule::do_conf(const CommandData_t&)
 {
   TLOG_DEBUG(TLVL_ENTER_EXIT_METHODS) << get_name() << ": Entering do_conf() method";
 
@@ -195,7 +195,7 @@ TRBModule::do_conf(const data_t&)
 }
 
 void
-TRBModule::do_scrap(const data_t& /*args*/)
+TRBModule::do_scrap(const CommandData_t& /*args*/)
 {
   TLOG_DEBUG(TLVL_ENTER_EXIT_METHODS) << get_name() << ": Entering do_scrap() method";
 
@@ -204,7 +204,7 @@ TRBModule::do_scrap(const data_t& /*args*/)
 }
 
 void
-TRBModule::do_start(const data_t& args)
+TRBModule::do_start(const CommandData_t& args)
 {
   TLOG_DEBUG(TLVL_ENTER_EXIT_METHODS) << get_name() << ": Entering do_start() method";
 
@@ -257,7 +257,7 @@ TRBModule::do_start(const data_t& args)
 }
 
 void
-TRBModule::do_stop(const data_t& /*args*/)
+TRBModule::do_stop(const CommandData_t& /*args*/)
 {
   TLOG_DEBUG(TLVL_ENTER_EXIT_METHODS) << get_name() << ": Entering do_stop() method";
   // Unregister the monitoring requests callback
@@ -398,7 +398,7 @@ TRBModule::fragments_callback(std::unique_ptr<daqdataformats::Fragment>& temp_fr
         m_last_bookkeeping = clock_type::now();
 
       } // loop over TRs to check if they are complete
-    } else {
+    } else if (requested && it != m_trigger_records.end()) {
 
       auto comp_size = it->second.second->get_fragments_ref().size();
       auto requ_size = it->second.second->get_header_ref().get_num_requested_components();
