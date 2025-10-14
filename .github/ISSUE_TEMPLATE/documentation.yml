@@ -8,7 +8,7 @@ body:
     id: description
     attributes:
       label: Description
-      description: Describe what part of the documentation needs updating
+      description: Describe what part of the documentation needs updating THIS CHANGE IS UNIQUE TO MY FORK
       placeholder: "XYZ is not described well in the README..."
     validations:
       required: true
